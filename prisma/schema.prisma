@@ -7,12 +7,540 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-
 model User {
+  id                   Int        @id @default(autoincrement())
+  email                String     @unique
+  password             String
+  firstName            String
+  lastName             String
+  role                 Role       @default(MEMBER)
+  phone                String?
+  address              String?
+  city                 String?
+  dateOfBirth          DateTime?
+  gender               Gender?
+  avatar               String?
+  status               UserStatus @default(ACTIVE)
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
+  isVerified           Boolean    @default(false)
+  verificationToken    String?    @unique
+  resetPasswordToken   String?    @unique
+  resetPasswordExpires DateTime?
+  lastLogin            DateTime?
+  twoFactorEnabled     Boolean    @default(false)
+  twoFactorSecret      String?
+  loginAttempts        Int        @default(0)
+  lockedUntil          DateTime?
+
+  // Mối quan hệ
+  member            Member?
+  trainer           Trainer?
+  adminActions      AdminLog[]
+  notifications     Notification[]  @relation("UserNotifications")
+  sentNotifications Notification[]  @relation("SentNotifications")
+  refreshTokens     RefreshToken[]
+  Device            Device[]
+  File              File[]
+  AuditLog          AuditLog[]
+  DiscountUsage     DiscountUsage[]
+}
+
+enum Role {
+  ADMIN
+  TRAINER
+  MEMBER
+  RECEPTIONIST
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+// Mô hình thành viên (dựa vào MemberProfile.tsx)
+model Member {
+  id               Int              @id @default(autoincrement())
+  userId           Int              @unique
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emergencyContact String?
+  emergencyPhone   String?
+  healthNotes      String?
+  memberSince      DateTime         @default(now())
+  expiryDate       DateTime?
+  membershipStatus MembershipStatus @default(ACTIVE)
+  remainingPT      Int              @default(0)
+
+  // Mối quan hệ
+  membershipPlan   MembershipPlan?   @relation(fields: [membershipPlanId], references: [id])
+  membershipPlanId Int?
+  appointments     Appointment[]
+  classEnrollments ClassEnrollment[]
+  checkIns         CheckIn[]
+  payments         Payment[]
+  measurements     BodyMeasurement[]
+  Subscription     Subscription?
+}
+
+enum MembershipStatus {
+  ACTIVE
+  EXPIRED
+  PENDING
+  FROZEN
+}
+
+// Mô hình huấn luyện viên (dựa vào Trainers.tsx và TrainerDetail.tsx)
+model Trainer {
+  id          Int    @id @default(autoincrement())
+  userId      Int    @unique
+  user        User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  bio         String @db.Text
+  experience  Int    @default(0)
+  rating      Float  @default(0)
+  reviewCount Int    @default(0)
+
+  // Mối quan hệ
+  specialties         TrainerSpecialty[]
+  certifications      Certification[]
+  schedules           Schedule[]
+  appointments        Appointment[]
+  classes             Class[]
+  reviews             TrainerReview[]
+  TrainerAvailability TrainerAvailability[]
+}
+
+model TrainerSpecialty {
+  id        Int       @id @default(autoincrement())
+  trainer   Trainer   @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+  trainerId Int
+  specialty Specialty
+
+  @@unique([trainerId, specialty])
+}
+
+enum Specialty {
+  STRENGTH
+  HIIT
+  YOGA
+  PILATES
+  CARDIO
+  DANCE
+  NUTRITION
+  REHABILITATION
+}
+
+model Certification {
+  id         Int       @id @default(autoincrement())
+  trainer    Trainer   @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+  trainerId  Int
+  name       String
+  issueDate  DateTime?
+  expiryDate DateTime?
+  issuedBy   String?
+}
+
+// Lịch làm việc của huấn luyện viên
+model Schedule {
+  id          Int       @id @default(autoincrement())
+  trainer     Trainer   @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+  trainerId   Int
+  dayOfWeek   DayOfWeek
+  startTime   String
+  endTime     String
+  isAvailable Boolean   @default(true)
+
+  @@unique([trainerId, dayOfWeek, startTime])
+}
+
+enum DayOfWeek {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+  SUNDAY
+}
+
+// Đánh giá huấn luyện viên
+model TrainerReview {
   id        Int      @id @default(autoincrement())
-  email     String   @unique
-  name      String?
-  password  String
+  trainer   Trainer  @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+  trainerId Int
+  memberId  Int
+  rating    Float
+  comment   String?  @db.Text
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+}
+
+// Mô hình lớp học (dựa vào Classes.tsx)
+model Class {
+  id              Int        @id @default(autoincrement())
+  title           String
+  description     String     @db.Text
+  category        Specialty
+  difficulty      Difficulty
+  maxParticipants Int        @default(15)
+  image           String?
+
+  // Mối quan hệ
+  trainer     Trainer           @relation(fields: [trainerId], references: [id])
+  trainerId   Int
+  schedules   ClassSchedule[]
+  enrollments ClassEnrollment[]
+}
+
+enum Difficulty {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
+model ClassSchedule {
+  id        Int       @id @default(autoincrement())
+  classId   Int
+  class     Class     @relation(fields: [classId], references: [id], onDelete: Cascade)
+  dayOfWeek DayOfWeek
+  startTime String
+  endTime   String
+  isActive  Boolean   @default(true)
+
+  @@unique([classId, dayOfWeek, startTime])
+}
+
+model ClassEnrollment {
+  id         Int              @id @default(autoincrement())
+  classId    Int
+  class      Class            @relation(fields: [classId], references: [id], onDelete: Cascade)
+  memberId   Int
+  member     Member           @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  enrolledAt DateTime         @default(now())
+  status     EnrollmentStatus @default(ACTIVE)
+
+  @@unique([classId, memberId])
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  CANCELLED
+  COMPLETED
+}
+
+// Mô hình gói thành viên (dựa vào Home.tsx - Membership section)
+model MembershipPlan {
+  id             Int      @id @default(autoincrement())
+  name           String
+  description    String   @db.Text
+  price          Float
+  durationMonths Int
+  freePTSessions Int      @default(0)
+  features       String[]
+  isActive       Boolean  @default(true)
+
+  // Mối quan hệ
+  members       Member[]
+  payments      Payment[]
+  Subscription  Subscription[]
+  discountCodes DiscountCode[]
+}
+
+// Mô hình đặt lịch (buổi huấn luyện cá nhân)
+model Appointment {
+  id                  Int                   @id @default(autoincrement())
+  memberId            Int
+  member              Member                @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  trainerId           Int
+  trainer             Trainer               @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+  date                DateTime
+  startTime           String
+  endTime             String
+  status              AppointmentStatus     @default(SCHEDULED)
+  notes               String?               @db.Text
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+  TrainerAvailability TrainerAvailability[]
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+// Mô hình check-in
+model CheckIn {
+  id           Int       @id @default(autoincrement())
+  memberId     Int
+  member       Member    @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  checkInTime  DateTime  @default(now())
+  checkOutTime DateTime?
+}
+
+// Mô hình thanh toán
+model Payment {
+  id               Int             @id @default(autoincrement())
+  memberId         Int
+  member           Member          @relation(fields: [memberId], references: [id])
+  membershipPlanId Int?
+  membershipPlan   MembershipPlan? @relation(fields: [membershipPlanId], references: [id])
+  amount           Float
+  paymentMethod    PaymentMethod
+  status           PaymentStatus   @default(PENDING)
+  transactionId    String?
+  description      String?
+  createdAt        DateTime        @default(now())
+  paidAt           DateTime?
+  Transaction      Transaction?
+  DiscountUsage    DiscountUsage[]
+}
+
+enum PaymentMethod {
+  CREDIT_CARD
+  BANK_TRANSFER
+  CASH
+  OTHER
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+// Theo dõi chỉ số cơ thể
+model BodyMeasurement {
+  id         Int      @id @default(autoincrement())
+  memberId   Int
+  member     Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  weight     Float?
+  height     Float?
+  bodyFat    Float?
+  muscleMass Float?
+  bmi        Float?
+  notes      String?  @db.Text
+  measuredAt DateTime @default(now())
+}
+
+// Hoạt động của admin
+model AdminLog {
+  id        Int      @id @default(autoincrement())
+  adminId   Int
+  admin     User     @relation(fields: [adminId], references: [id])
+  action    String
+  details   String?  @db.Text
+  createdAt DateTime @default(now())
+}
+
+// Thông báo
+model Notification {
+  id        Int              @id @default(autoincrement())
+  userId    Int
+  user      User             @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade)
+  sentById  Int?
+  sentBy    User?            @relation("SentNotifications", fields: [sentById], references: [id])
+  title     String
+  message   String           @db.Text
+  type      NotificationType
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+}
+
+enum NotificationType {
+  SYSTEM
+  MEMBERSHIP
+  APPOINTMENT
+  PAYMENT
+  PROMOTION
+  MEMBERSHIP_EXPIRY
+  MEMBERSHIP_RENEWAL
+  PAYMENT_SUCCESS
+  PAYMENT_FAILED
+  APPOINTMENT_REMINDER
+  APPOINTMENT_CANCELLATION
+  CLASS_REMINDER
+  ACCOUNT_SECURITY
+}
+
+// RefreshToken model
+model RefreshToken {
+  id              Int      @id @default(autoincrement())
+  token           String   @unique
+  userId          Int
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt       DateTime
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  ipAddress       String?
+  userAgent       String?  @db.Text
+  isRevoked       Boolean  @default(false)
+  replacedByToken String?
+
+  @@index([userId])
+}
+
+// Thêm model cho Device Tracking
+model Device {
+  id            Int      @id @default(autoincrement())
+  userId        Int
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceId      String
+  deviceType    String?
+  deviceName    String?
+  lastIpAddress String?
+  lastUsedAt    DateTime @default(now())
+  isTrusted     Boolean  @default(false)
+  userAgent     String?  @db.Text
+
+  @@unique([userId, deviceId])
+}
+
+// Model Subscription để quản lý đăng ký (thay thế cho những trường trong Member)
+model Subscription {
+  id                  Int                @id @default(autoincrement())
+  memberId            Int                @unique
+  member              Member             @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  membershipPlanId    Int
+  membershipPlan      MembershipPlan     @relation(fields: [membershipPlanId], references: [id])
+  startDate           DateTime           @default(now())
+  endDate             DateTime
+  status              SubscriptionStatus @default(ACTIVE)
+  autoRenew           Boolean            @default(false)
+  canceledAt          DateTime?
+  renewalReminderSent Boolean            @default(false)
+
+  @@index([memberId])
+  @@index([membershipPlanId])
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PENDING
+  CANCELED
+  EXPIRED
+  FROZEN
+}
+
+// Model File để quản lý tệp đính kèm (ảnh, tệp)
+model File {
+  id           Int      @id @default(autoincrement())
+  fileName     String
+  fileType     String
+  filePath     String
+  fileSize     Int
+  uploadedById Int
+  uploadedBy   User     @relation(fields: [uploadedById], references: [id])
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  entityType   String? // Ví dụ: "user", "member", "trainer"
+  entityId     Int? // ID của đối tượng liên quan
+}
+
+// Model Audit cho việc theo dõi thay đổi
+model AuditLog {
+  id         Int      @id @default(autoincrement())
+  userId     Int
+  user       User     @relation(fields: [userId], references: [id])
+  action     String
+  entityType String
+  entityId   Int
+  oldValues  String?  @db.Text
+  newValues  String?  @db.Text
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+}
+
+// Model Transaction chi tiết hơn cho thanh toán
+model Transaction {
+  id                   Int               @id @default(autoincrement())
+  paymentId            Int               @unique
+  payment              Payment           @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  transactionCode      String            @unique
+  gateway              String // "stripe", "paypal", etc.
+  gatewayResponse      String?           @db.Text
+  gatewayTransactionId String?
+  amount               Float
+  currency             String            @default("VND")
+  feeAmount            Float?
+  netAmount            Float?
+  metadata             Json?
+  status               TransactionStatus @default(PENDING)
+  errorMessage         String?           @db.Text
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+}
+
+enum TransactionStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+// Model TrainerAvailability chi tiết hơn
+model TrainerAvailability {
+  id             Int          @id @default(autoincrement())
+  trainerId      Int
+  trainer        Trainer      @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+  date           DateTime // Specific date
+  startTime      String
+  endTime        String
+  isAvailable    Boolean      @default(true)
+  isBooked       Boolean      @default(false)
+  bookingId      Int?
+  booking        Appointment? @relation(fields: [bookingId], references: [id])
+  recurrenceRule String? // iCalendar RRULE format for recurring availability
+
+  @@unique([trainerId, date, startTime])
+  @@index([trainerId, date])
+}
+
+// Model DiscountCode cho các khuyến mãi
+model DiscountCode {
+  id              Int          @id @default(autoincrement())
+  code            String       @unique
+  description     String?
+  discountType    DiscountType
+  discountValue   Float
+  minimumPurchase Float?
+  maximumDiscount Float?
+  startDate       DateTime     @default(now())
+  endDate         DateTime?
+  usageLimit      Int?
+  usedCount       Int          @default(0)
+  isActive        Boolean      @default(true)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  // Relationships - sửa lại mối quan hệ many-to-many
+  applicablePlans MembershipPlan[]
+  usedBy          DiscountUsage[]
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED_AMOUNT
+}
+
+model DiscountUsage {
+  id         Int          @id @default(autoincrement())
+  discountId Int
+  discount   DiscountCode @relation(fields: [discountId], references: [id])
+  userId     Int
+  user       User         @relation(fields: [userId], references: [id])
+  usedAt     DateTime     @default(now())
+  paymentId  Int?
+  payment    Payment?     @relation(fields: [paymentId], references: [id])
+
+  @@unique([discountId, userId, paymentId])
 }
