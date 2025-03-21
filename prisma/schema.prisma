@@ -36,7 +36,6 @@ model User {
   // Mối quan hệ
   member            Member?
   trainer           Trainer?
-  adminActions      AdminLog[]
   notifications     Notification[]  @relation("UserNotifications")
   sentNotifications Notification[]  @relation("SentNotifications")
   refreshTokens     RefreshToken[]
@@ -331,14 +330,20 @@ model BodyMeasurement {
   measuredAt DateTime @default(now())
 }
 
-// Hoạt động của admin
-model AdminLog {
-  id        Int      @id @default(autoincrement())
-  adminId   Int
-  admin     User     @relation(fields: [adminId], references: [id])
-  action    String
-  details   String?  @db.Text
-  createdAt DateTime @default(now())
+// Model Audit cho việc theo dõi thay đổi
+model AuditLog {
+  id            Int      @id @default(autoincrement())
+  userId        Int
+  user          User     @relation(fields: [userId], references: [id])
+  action        String
+  entityType    String
+  entityId      Int
+  oldValues     String?  @db.Text
+  newValues     String?  @db.Text
+  ipAddress     String?
+  isAdminAction Boolean  @default(false)
+  details       String?  @db.Text
+  createdAt     DateTime @default(now())
 }
 
 // Thông báo
@@ -443,20 +448,6 @@ model File {
   updatedAt    DateTime @updatedAt
   entityType   String? // Ví dụ: "user", "member", "trainer"
   entityId     Int? // ID của đối tượng liên quan
-}
-
-// Model Audit cho việc theo dõi thay đổi
-model AuditLog {
-  id         Int      @id @default(autoincrement())
-  userId     Int
-  user       User     @relation(fields: [userId], references: [id])
-  action     String
-  entityType String
-  entityId   Int
-  oldValues  String?  @db.Text
-  newValues  String?  @db.Text
-  ipAddress  String?
-  createdAt  DateTime @default(now())
 }
 
 // Model Transaction chi tiết hơn cho thanh toán

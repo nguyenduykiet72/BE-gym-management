@@ -668,7 +668,6 @@ async function clearDatabase() {
   // Clear existing data (in reverse order of dependencies)
   await prisma.discountUsage.deleteMany({});
   await prisma.notification.deleteMany({});
-  await prisma.adminLog.deleteMany({});
   await prisma.bodyMeasurement.deleteMany({});
   await prisma.transaction.deleteMany({});
   await prisma.payment.deleteMany({});
