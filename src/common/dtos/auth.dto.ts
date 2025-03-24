@@ -5,6 +5,7 @@ import {
   MinLength,
   IsOptional,
   Matches,
+  Length,
 } from 'class-validator';
 import { MemberEntity } from '../entities/member.entity';
 import { UserEntity } from '../entities/user.entity';
@@ -64,6 +65,25 @@ export class RegisterResponseDto {
   message: string;
 
   constructor(partial: Partial<RegisterResponseDto>) {
+    Object.assign(this, partial);
+  }
+}
+
+export class LoginBodyDTO {
+  @IsString()
+  email: string;
+
+  @IsString()
+  @Length(6, 20, { message: 'Password must be at least 6 characters' })
+  password: string;
+}
+
+
+export class LoginEntityResponse {
+  accessToken: string;
+  refreshToken: string;
+
+  constructor(partial: Partial<LoginEntityResponse>) {
     Object.assign(this, partial);
   }
 }

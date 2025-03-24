@@ -2,14 +2,14 @@ import {
   ConflictException,
   Injectable,
   UnauthorizedException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import { HashingService } from './hash.service';
 import { TokenService } from './token.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { JsonWebTokenError, TokenExpiredError } from 'jsonwebtoken';
 import { MembershipStatus, Prisma, Role } from '@prisma/client';
-import { MemberService } from './member.service';
-import { RegisterDto } from '../dtos/auth.dto';
+import { LoginBodyDTO, RegisterDto } from '../dtos/auth.dto';
 
 @Injectable()
 export class AuthService {
@@ -17,7 +17,6 @@ export class AuthService {
     private readonly tokenService: TokenService,
     private readonly hashingService: HashingService,
     private readonly prismaService: PrismaService,
-    private readonly memberService: MemberService,
   ) {}
 
   async generateTokens(payload: { userId: number }) {
@@ -113,5 +112,34 @@ export class AuthService {
 
       return { user, message: 'User created successfully' };
     });
+  }
+
+  async login(body: LoginBodyDTO) {
+    const user = await this.prismaService.user.findUnique({
+      where: {
+        email: body.email,
+      },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    const isPasswordValid = await this.hashingService.compare(
+      body.password,
+      user.password,
+    );
+
+    if (!isPasswordValid) {
+      throw new UnprocessableEntityException([
+        {
+          field: 'password',
+          error: 'Password is incorrect',
+        },
+      ]);
+    }
+
+    const token = await this.generateTokens({ userId: user.id });
+    return token;
   }
 }
